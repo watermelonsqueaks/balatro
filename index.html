@@ -9,7 +9,7 @@
 
     <base href="https://cdn.jsdelivr.net/gh/SomeRandomFella/portsandrips@master/balatro/">
 
-    <title>Balatro</title>
+    <title>Balatro - GeekKidSchoolwork</title>
 
     <link rel="stylesheet" href="theme/love.css">
     <script src="consolewrapper.js"></script>
@@ -100,233 +100,498 @@
 <pre id="errorBox"></pre>
 
 <script>
-    // ----------------------------------
-    // GENERAL SETTINGS
-    // ----------------------------------
 
-    window.callad = () => {
-        window.parent.postMessage({ type: "adcall" }, "*");
-    };
+// ----------------------------------
+// GENERAL SETTINGS
+// ----------------------------------
 
-    // ----------------------------------
-    // ERROR REPORTING
-    // ----------------------------------
+window.callad = () => {
+    window.parent.postMessage({ type: "adcall" }, "*");
+};
 
-    function showError(message) {
-        console.error("[Balatro]", message);
+// ----------------------------------
+// ERROR REPORTING
+// ----------------------------------
 
-        const box = document.getElementById("errorBox");
+function showError(message) {
+    console.error("[Balatro]", message);
 
-        box.style.display = "block";
-        box.textContent += "[Balatro Error]\n" + message + "\n\n";
+    const box = document.getElementById("errorBox");
+
+    box.style.display = "block";
+    box.textContent += "[Balatro Error]\n" + message + "\n\n";
+}
+
+// ----------------------------------
+// MEMORY FAILURE DETECTION
+// ----------------------------------
+
+let memoryFailed = false;
+
+function showMemoryError(reason) {
+    if (memoryFailed) return;
+
+    memoryFailed = true;
+
+    console.error("[Balatro] MEMORY FAILURE:", reason);
+
+    const canvas = document.getElementById("loadingCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Stop normal loading screen
+    canvas.style.display = "block";
+    canvas.style.visibility = "visible";
+
+    // Red error background
+    ctx.fillStyle = "#8EC3E3";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Error text
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#D00000";
+
+    ctx.font = "bold 30px Arial";
+
+    ctx.fillText(
+        "MEMORY MAXED OUT,",
+        canvas.width / 2,
+        canvas.height / 2 - 25
+    );
+
+    ctx.fillText(
+        "TRY AGAIN",
+        canvas.width / 2,
+        canvas.height / 2 + 20
+    );
+
+    // Hide game
+    document.getElementById("canvas").style.visibility = "hidden";
+}
+
+function isMemoryError(error) {
+    const message = String(
+        error && (error.message || error.reason || error)
+    ).toLowerCase();
+
+    return (
+        message.includes("out of memory") ||
+        message.includes("out-of-memory") ||
+        message.includes("memory access out of bounds") ||
+        message.includes("memory allocation failed") ||
+        message.includes("failed to allocate memory") ||
+        message.includes("cannot enlarge memory") ||
+        message.includes("could not allocate memory") ||
+        message.includes("maximum memory") ||
+        message.includes("allocation failed") ||
+        message.includes("array buffer allocation failed") ||
+        message.includes("rangeerror")
+    );
+}
+
+// ----------------------------------
+// JAVASCRIPT ERROR HANDLING
+// ----------------------------------
+
+window.onerror = function(message, source, line, column, error) {
+
+    if (isMemoryError(error || message)) {
+        showMemoryError(message);
+        return true;
     }
 
-    window.onerror = function(message, source, line, column, error) {
-        showError(
-            message +
-            "\nFile: " + source +
-            "\nLine: " + line +
-            "\nColumn: " + column +
-            (error && error.stack ? "\n" + error.stack : "")
-        );
-    };
+    showError(
+        message +
+        "\nFile: " + source +
+        "\nLine: " + line +
+        "\nColumn: " + column +
+        (error && error.stack ? "\n" + error.stack : "")
+    );
 
-    window.addEventListener("unhandledrejection", function(event) {
-        showError(
-            "Unhandled Promise Rejection:\n" +
-            (event.reason && event.reason.stack
-                ? event.reason.stack
-                : String(event.reason))
-        );
-    });
+    return false;
+};
 
-    // Detect failed external scripts and stylesheets.
-    window.addEventListener("error", function(event) {
-        const target = event.target;
+window.addEventListener("unhandledrejection", function(event) {
 
-        if (target && target !== window && target.src) {
-            showError("Failed to load: " + target.src);
-        } else if (target && target !== window && target.href) {
-            showError("Failed to load: " + target.href);
-        }
-    }, true);
-
-    // ----------------------------------
-    // LOADING SCREEN
-    // ----------------------------------
-
-    const loadingCanvas = document.getElementById("loadingCanvas");
-    const loadingContext = loadingCanvas.getContext("2d");
-
-    function resizeLoadingCanvas() {
-        loadingCanvas.width = window.innerWidth;
-        loadingCanvas.height = window.innerHeight;
+    if (isMemoryError(event.reason)) {
+        showMemoryError(event.reason);
+        return;
     }
 
-    resizeLoadingCanvas();
+    showError(
+        "Unhandled Promise Rejection:\n" +
+        (event.reason && event.reason.stack
+            ? event.reason.stack
+            : String(event.reason))
+    );
+});
 
-    window.addEventListener("resize", resizeLoadingCanvas);
+// Detect failed external resources
+window.addEventListener("error", function(event) {
 
-    function drawLoadingText(text) {
-        const width = loadingCanvas.width;
-        const height = loadingCanvas.height;
+    const target = event.target;
 
-        loadingContext.fillStyle = "rgb(142, 195, 227)";
-        loadingContext.fillRect(0, 0, width, height);
+    if (target && target !== window && target.src) {
+        showError("Failed to load: " + target.src);
+    }
 
-        loadingContext.font = "2em Arial";
-        loadingContext.textAlign = "center";
-        loadingContext.textBaseline = "middle";
+    else if (target && target !== window && target.href) {
+        showError("Failed to load: " + target.href);
+    }
+
+}, true);
+
+// ----------------------------------
+// GEEKSKIDSCHOOLWORK LOADING SCREEN
+// ----------------------------------
+
+const loadingCanvas = document.getElementById("loadingCanvas");
+const loadingContext = loadingCanvas.getContext("2d");
+
+let loadingMessage = "Downloading Balatro...";
+let animationTime = 0;
+
+function resizeLoadingCanvas() {
+
+    loadingCanvas.width = window.innerWidth;
+    loadingCanvas.height = window.innerHeight;
+
+    if (memoryFailed) {
+        showMemoryError("Memory allocation failure");
+    }
+}
+
+resizeLoadingCanvas();
+
+window.addEventListener("resize", resizeLoadingCanvas);
+
+function drawLoadingText(text) {
+    loadingMessage = text;
+}
+
+function animateLoadingScreen() {
+
+    if (memoryFailed) return;
+
+    const width = loadingCanvas.width;
+    const height = loadingCanvas.height;
+
+    animationTime += 0.035;
+
+    // Background
+    loadingContext.fillStyle = "rgb(142, 195, 227)";
+    loadingContext.fillRect(0, 0, width, height);
+
+    // ----------------------------------
+    // FLOATING BRANDING
+    // ----------------------------------
+
+    const title = "GEEKSKIDSCHOOLWORK";
+
+    const fontSize = Math.min(27, width / 17);
+
+    loadingContext.font = "bold " + fontSize + "px Arial";
+    loadingContext.textAlign = "center";
+    loadingContext.textBaseline = "middle";
+
+    const letterWidths = [];
+
+    for (let i = 0; i < title.length; i++) {
+
+        letterWidths.push(
+            loadingContext.measureText(title[i]).width + 1
+        );
+
+    }
+
+    const totalWidth = letterWidths.reduce((a, b) => a + b, 0);
+
+    let x = (width - totalWidth) / 2;
+
+    for (let i = 0; i < title.length; i++) {
+
+        const letter = title[i];
+
+        const floatY = Math.sin(
+            animationTime + i * 0.45
+        ) * 9;
+
+        const floatRotation = Math.sin(
+            animationTime + i * 0.3
+        ) * 0.08;
+
+        const letterWidth = letterWidths[i];
+
+        loadingContext.save();
+
+        loadingContext.translate(
+            x + letterWidth / 2,
+            height / 2 - 65 + floatY
+        );
+
+        loadingContext.rotate(floatRotation);
+
         loadingContext.fillStyle = "rgb(11, 86, 117)";
 
-        loadingContext.fillText(
-            text,
-            width / 2,
-            height / 2
-        );
+        loadingContext.shadowColor = "rgba(0, 0, 0, 0.2)";
+        loadingContext.shadowBlur = 5;
+        loadingContext.shadowOffsetY = 3;
+
+        loadingContext.fillText(letter, 0, 0);
+
+        loadingContext.restore();
+
+        x += letterWidth;
+
     }
 
     // ----------------------------------
-    // FULLSCREEN SUPPORT
+    // LOADING PROGRESS TEXT
     // ----------------------------------
 
-    function goFullScreen() {
-        const canvas = document.getElementById("canvas");
+    loadingContext.shadowColor = "transparent";
+    loadingContext.shadowBlur = 0;
+    loadingContext.shadowOffsetY = 0;
 
-        if (canvas.requestFullscreen) {
-            canvas.requestFullscreen().catch(function(error) {
-                showError("Fullscreen failed: " + error.message);
-            });
-        } else if (canvas.webkitRequestFullscreen) {
-            canvas.webkitRequestFullscreen();
+    loadingContext.font = "2em Arial";
+    loadingContext.fillStyle = "rgb(11, 86, 117)";
+    loadingContext.textAlign = "center";
+    loadingContext.textBaseline = "middle";
+
+    loadingContext.fillText(
+        loadingMessage,
+        width / 2,
+        height / 2 + 15
+    );
+
+    requestAnimationFrame(animateLoadingScreen);
+}
+
+animateLoadingScreen();
+
+// ----------------------------------
+// FULLSCREEN SUPPORT
+// ----------------------------------
+
+function goFullScreen() {
+
+    const canvas = document.getElementById("canvas");
+
+    if (canvas.requestFullscreen) {
+
+        canvas.requestFullscreen().catch(function(error) {
+            showError("Fullscreen failed: " + error.message);
+        });
+
+    }
+
+    else if (canvas.webkitRequestFullscreen) {
+        canvas.webkitRequestFullscreen();
+    }
+}
+
+function FullScreenHook() {
+
+    const canvas = document.getElementById("canvas");
+
+    canvas.style.width = "100vw";
+    canvas.style.height = "100vh";
+}
+
+document.addEventListener("fullscreenchange", FullScreenHook);
+
+// ----------------------------------
+// KEYBOARD SUPPORT
+// ----------------------------------
+
+window.onload = function() {
+    window.focus();
+};
+
+window.onclick = function() {
+    window.focus();
+};
+
+window.addEventListener("keydown", function(e) {
+
+    if ([32, 37, 38, 39, 40].includes(e.keyCode)) {
+        e.preventDefault();
+    }
+
+}, false);
+
+// ----------------------------------
+// LOVE.JS CONFIGURATION
+// ----------------------------------
+
+var Module = {
+
+    arguments: ["./game.love"],
+
+    // Original initial memory allocation
+    INITIAL_MEMORY: 256000000,
+
+    printErr: function(message) {
+
+        console.error("[LÖVE]", message);
+
+        if (isMemoryError(message)) {
+            showMemoryError(message);
         }
-    }
 
-    function FullScreenHook() {
+    },
+
+    canvas: (function() {
+
         const canvas = document.getElementById("canvas");
 
-        canvas.style.width = "100vw";
-        canvas.style.height = "100vh";
-    }
+        canvas.addEventListener("webglcontextlost", function(e) {
 
-    document.addEventListener("fullscreenchange", FullScreenHook);
-
-    // ----------------------------------
-    // KEYBOARD SUPPORT
-    // ----------------------------------
-
-    window.onload = function() {
-        window.focus();
-    };
-
-    window.onclick = function() {
-        window.focus();
-    };
-
-    window.addEventListener("keydown", function(e) {
-        if ([32, 37, 38, 39, 40].includes(e.keyCode)) {
             e.preventDefault();
-        }
-    }, false);
 
-    // ----------------------------------
-    // LOVE.JS CONFIGURATION
-    // ----------------------------------
-
-    var Module = {
-        arguments: ["./game.love"],
-
-        // Keep original memory allocation for initial testing.
-        INITIAL_MEMORY: 256000000,
-
-        printErr: function(message) {
-            console.error("[LÖVE]", message);
-        },
-
-        canvas: (function() {
-            const canvas = document.getElementById("canvas");
-
-            canvas.addEventListener("webglcontextlost", function(e) {
-                e.preventDefault();
-
-                showError(
-                    "WebGL context lost. Your browser or graphics hardware " +
-                    "may have run out of graphics resources."
-                );
-            }, false);
-
-            canvas.addEventListener("webglcontextrestored", function() {
-                console.log("[Balatro] WebGL context restored.");
-            });
-
-            return canvas;
-        })(),
-
-        setStatus: function(text) {
-            if (text) {
-                drawLoadingText(text);
-            } else if (Module.remainingDependencies === 0) {
-                loadingCanvas.style.display = "none";
-
-                document.getElementById("canvas").style.visibility = "visible";
-            }
-        },
-
-        totalDependencies: 0,
-        remainingDependencies: 0,
-
-        monitorRunDependencies: function(left) {
-            this.remainingDependencies = left;
-
-            this.totalDependencies = Math.max(
-                this.totalDependencies,
-                left
+            showError(
+                "WebGL context lost. Your browser or graphics hardware " +
+                "may have run out of graphics resources."
             );
 
-            Module.setStatus(
-                left
-                    ? "Preparing... (" +
-                      (this.totalDependencies - left) +
-                      "/" +
-                      this.totalDependencies +
-                      ")"
-                    : "All downloads complete."
-            );
+        }, false);
+
+        canvas.addEventListener("webglcontextrestored", function() {
+            console.log("[Balatro] WebGL context restored.");
+        });
+
+        return canvas;
+
+    })(),
+
+    setStatus: function(text) {
+
+        if (memoryFailed) return;
+
+        if (text) {
+
+            drawLoadingText(text);
+
         }
-    };
 
-    Module.setStatus("Downloading Balatro...");
+        else if (Module.remainingDependencies === 0) {
 
-    // ----------------------------------
-    // GAME INITIALIZATION
-    // ----------------------------------
+            loadingCanvas.style.display = "none";
 
-    var applicationLoad = function() {
-        if (typeof Love !== "function") {
-            showError("LÖVE runtime failed to initialize. Love() was not found.");
-            return;
+            document.getElementById("canvas").style.visibility = "visible";
+
         }
+
+    },
+
+    totalDependencies: 0,
+    remainingDependencies: 0,
+
+    monitorRunDependencies: function(left) {
+
+        this.remainingDependencies = left;
+
+        this.totalDependencies = Math.max(
+            this.totalDependencies,
+            left
+        );
+
+        Module.setStatus(
+            left
+                ? "Preparing... (" +
+                  (this.totalDependencies - left) +
+                  "/" +
+                  this.totalDependencies +
+                  ")"
+                : "All downloads complete."
+        );
+
+    }
+
+};
+
+Module.setStatus("Downloading Balatro...");
+
+// ----------------------------------
+// WEBASSEMBLY MEMORY GROWTH DETECTION
+// ----------------------------------
+
+if (typeof WebAssembly !== "undefined") {
+
+    const originalGrow = WebAssembly.Memory.prototype.grow;
+
+    WebAssembly.Memory.prototype.grow = function(pages) {
 
         try {
-            console.log("[Balatro] Starting LÖVE runtime...");
-            Love(Module);
-        } catch(error) {
+
+            return originalGrow.call(this, pages);
+
+        }
+
+        catch(error) {
+
+            showMemoryError(error);
+
+            throw error;
+
+        }
+
+    };
+
+}
+
+// ----------------------------------
+// GAME INITIALIZATION
+// ----------------------------------
+
+var applicationLoad = function() {
+
+    if (typeof Love !== "function") {
+
+        showError(
+            "LÖVE runtime failed to initialize. Love() was not found."
+        );
+
+        return;
+
+    }
+
+    try {
+
+        console.log("[Balatro] Starting LÖVE runtime...");
+
+        Love(Module);
+
+    }
+
+    catch(error) {
+
+        if (isMemoryError(error)) {
+            showMemoryError(error);
+        }
+
+        else {
+
             showError(
                 "Failed to start game:\n" +
                 (error.stack || error.message || error)
             );
+
         }
-    };
+
+    }
+
+};
 
 </script>
 
-<!-- Load the original game engine -->
+<!-- Original game engine -->
 <script
     src="game.js"
     onerror="showError('Could not download game.js from jsDelivr.')">
 </script>
 
-<!-- Load the original LÖVE runtime -->
+<!-- Original LÖVE runtime -->
 <script
     async
     src="love.js"
